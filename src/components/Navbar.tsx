@@ -2,10 +2,10 @@
 
 import React from 'react';
 import { useFinance } from '@/lib/store';
-import { Sparkles, RotateCcw, ShieldCheck, Wallet } from 'lucide-react';
+import { Sparkles, RotateCcw, ShieldCheck, Wallet, Cloud, CloudOff } from 'lucide-react';
 
 export function Navbar({ onOpenAdvisor }: { onOpenAdvisor: () => void }) {
-  const { totalLiquidBalance, resetAllData } = useFinance();
+  const { totalLiquidBalance, resetAllData, isCloudSynced } = useFinance();
 
   return (
     <header className="sticky top-0 z-40 w-full bg-zinc-950/80 backdrop-blur-md border-b border-zinc-800/80 pt-safe">
@@ -20,6 +20,17 @@ export function Navbar({ onOpenAdvisor }: { onOpenAdvisor: () => void }) {
               <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 14d
               </span>
+              {isCloudSynced ? (
+                <span title="Sincronizado con Supabase" className="flex items-center text-[10px] font-mono text-emerald-400 gap-0.5 bg-emerald-500/10 px-1 py-0.5 rounded border border-emerald-500/20">
+                  <Cloud className="w-2.5 h-2.5" />
+                  Cloud
+                </span>
+              ) : (
+                <span title="Modo Local" className="flex items-center text-[10px] font-mono text-zinc-500 gap-0.5 bg-zinc-800/80 px-1 py-0.5 rounded">
+                  <CloudOff className="w-2.5 h-2.5" />
+                  Local
+                </span>
+              )}
             </h1>
             <p className="text-[11px] text-zinc-400 flex items-center gap-1">
               <ShieldCheck className="w-3 h-3 text-emerald-400" />

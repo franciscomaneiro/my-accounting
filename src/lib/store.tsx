@@ -16,6 +16,7 @@ import {
   INITIAL_DEBTS,
   INITIAL_TRANSACTIONS,
 } from './seed-data';
+import { supabase, isSupabaseConfigured } from './supabase';
 
 interface FinanceContextType {
   accounts: Account[];
@@ -24,6 +25,7 @@ interface FinanceContextType {
   debts: DebtPlan[];
   transactions: Transaction[];
   activeCycleId: string;
+  isCloudSynced: boolean;
   setActiveCycleId: (id: string) => void;
   updateAccountBalance: (id: string, newBalance: number) => void;
   transferFunds: (fromId: string, toId: string, amount: number, note?: string) => void;
@@ -55,6 +57,7 @@ const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
 export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isCloudSynced, setIsCloudSynced] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>(INITIAL_ACCOUNTS);
   const [cycles, setCycles] = useState<PayrollCycle[]>(INITIAL_CYCLES);
   const [expenses, setExpenses] = useState<ExpenseCategory[]>(INITIAL_EXPENSE_CATEGORIES);
@@ -62,7 +65,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [activeCycleId, setActiveCycleId] = useState<string>('cycle-2026-10-30');
 
-  // Load from LocalStorage
+  // 1. Initial Load: LocalStorage first for instant paint, then Supabase if configured
   useEffect(() => {
     try {
       const storedAccounts = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
@@ -83,9 +86,75 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoaded(true);
     }
+
+    // Fetch from Supabase
+    if (isSupabaseConfigured && supabase) {
+      async function syncFromSupabase() {
+        try {
+          const [
+            { data: sbAccounts },
+            { data: sbCycles },
+            { data: sbExpenses },
+            { data: sbDebts },
+            { data: sbTransactions },
+          ] = await Promise.all([
+            supabase!.from('accounts').select('*').order('name'),
+            supabase!.from('payroll_cycles').select('*').order('cycle_date'),
+            supabase!.from('expense_categories').select('*').order('name'),
+            supabase!.from('debt_plans').select('*').order('start_date'),
+            supabase!.from('transactions').select('*').order('created_at', { ascending: false }).limit(50),
+          ]);
+
+          if (sbAccounts && sbAccounts.length > 0) {
+            setAccounts(sbAccounts.map((a: any) => ({
+              ...a,
+              current_balance: Number(a.current_balance),
+            })));
+          }
+
+          if (sbCycles && sbCycles.length > 0) {
+            setCycles(sbCycles.map((c: any) => ({
+              ...c,
+              hours_worked: Number(c.hours_worked),
+              hourly_rate: Number(c.hourly_rate),
+              gross_income: Number(c.gross_income),
+            })));
+          }
+
+          if (sbExpenses && sbExpenses.length > 0) {
+            setExpenses(sbExpenses.map((e: any) => ({
+              ...e,
+              default_amount: Number(e.default_amount),
+            })));
+          }
+
+          if (sbDebts && sbDebts.length > 0) {
+            setDebts(sbDebts.map((d: any) => ({
+              ...d,
+              total_amount: Number(d.total_amount),
+              installment_amount: Number(d.installment_amount),
+              total_installments: Number(d.total_installments),
+              installments_paid: Number(d.installments_paid),
+            })));
+          }
+
+          if (sbTransactions && sbTransactions.length > 0) {
+            setTransactions(sbTransactions.map((t: any) => ({
+              ...t,
+              amount: Number(t.amount),
+            })));
+          }
+
+          setIsCloudSynced(true);
+        } catch (err) {
+          console.warn('Error fetching from Supabase, operating offline:', err);
+        }
+      }
+      syncFromSupabase();
+    }
   }, []);
 
-  // Save to LocalStorage
+  // 2. Persist to LocalStorage whenever state changes
   useEffect(() => {
     if (!isLoaded) return;
     try {
@@ -100,7 +169,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     }
   }, [accounts, cycles, expenses, debts, transactions, activeCycleId, isLoaded]);
 
-  const updateAccountBalance = (id: string, newBalance: number) => {
+  // Actions with Supabase background sync
+  const updateAccountBalance = async (id: string, newBalance: number) => {
     setAccounts((prev) =>
       prev.map((acc) =>
         acc.id === id
@@ -108,30 +178,35 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           : acc
       )
     );
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from('accounts')
+          .update({ current_balance: newBalance, updated_at: new Date().toISOString() })
+          .eq('id', id);
+      } catch (e) {
+        console.error('Supabase update error:', e);
+      }
+    }
   };
 
-  const transferFunds = (fromId: string, toId: string, amount: number, note?: string) => {
+  const transferFunds = async (fromId: string, toId: string, amount: number, note?: string) => {
     if (amount <= 0) return;
+    let newFromBal = 0;
+    let newToBal = 0;
+
     setAccounts((prev) => {
       const fromAcc = prev.find((a) => a.id === fromId);
       const toAcc = prev.find((a) => a.id === toId);
       if (!fromAcc || !toAcc) return prev;
 
+      newFromBal = Math.max(0, fromAcc.current_balance - amount);
+      newToBal = toAcc.current_balance + amount;
+
       return prev.map((acc) => {
-        if (acc.id === fromId) {
-          return {
-            ...acc,
-            current_balance: Math.max(0, acc.current_balance - amount),
-            updated_at: new Date().toISOString(),
-          };
-        }
-        if (acc.id === toId) {
-          return {
-            ...acc,
-            current_balance: acc.current_balance + amount,
-            updated_at: new Date().toISOString(),
-          };
-        }
+        if (acc.id === fromId) return { ...acc, current_balance: newFromBal, updated_at: new Date().toISOString() };
+        if (acc.id === toId) return { ...acc, current_balance: newToBal, updated_at: new Date().toISOString() };
         return acc;
       });
     });
@@ -148,9 +223,29 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       created_at: new Date().toISOString(),
     };
     setTransactions((prev) => [newTx, ...prev]);
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await Promise.all([
+          supabase.from('accounts').update({ current_balance: newFromBal, updated_at: new Date().toISOString() }).eq('id', fromId),
+          supabase.from('accounts').update({ current_balance: newToBal, updated_at: new Date().toISOString() }).eq('id', toId),
+          supabase.from('transactions').insert({
+            account_id: fromId,
+            to_account_id: toId,
+            category: 'Transferencia',
+            description: note || 'Transferencia entre cuentas',
+            amount,
+            type: 'transfer',
+            is_settled: true,
+          }),
+        ]);
+      } catch (e) {
+        console.error('Supabase transfer sync error:', e);
+      }
+    }
   };
 
-  const updateCycleHours = (cycleId: string, hours: number) => {
+  const updateCycleHours = async (cycleId: string, hours: number) => {
     setCycles((prev) =>
       prev.map((c) => {
         if (c.id === cycleId) {
@@ -160,61 +255,129 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         return c;
       })
     );
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from('payroll_cycles')
+          .update({ hours_worked: hours })
+          .eq('id', cycleId);
+      } catch (e) {
+        console.error('Supabase updateCycleHours error:', e);
+      }
+    }
   };
 
-  const toggleExpense = (id: string) => {
+  const toggleExpense = async (id: string) => {
+    let nextActive = true;
     setExpenses((prev) =>
-      prev.map((e) => (e.id === id ? { ...e, is_active: !e.is_active } : e))
+      prev.map((e) => {
+        if (e.id === id) {
+          nextActive = !e.is_active;
+          return { ...e, is_active: nextActive };
+        }
+        return e;
+      })
     );
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('expense_categories').update({ is_active: nextActive }).eq('id', id);
+      } catch (e) {
+        console.error('Supabase toggleExpense error:', e);
+      }
+    }
   };
 
-  const updateExpenseAmount = (id: string, amount: number) => {
+  const updateExpenseAmount = async (id: string, amount: number) => {
     setExpenses((prev) =>
       prev.map((e) => (e.id === id ? { ...e, default_amount: amount } : e))
     );
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('expense_categories').update({ default_amount: amount }).eq('id', id);
+      } catch (e) {
+        console.error('Supabase updateExpenseAmount error:', e);
+      }
+    }
   };
 
-  const addExpense = (expense: Omit<ExpenseCategory, 'id'>) => {
+  const addExpense = async (expense: Omit<ExpenseCategory, 'id'>) => {
     const newExp: ExpenseCategory = {
       ...expense,
       id: 'exp-' + Date.now(),
     };
     setExpenses((prev) => [...prev, newExp]);
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('expense_categories').insert({
+          name: expense.name,
+          default_amount: expense.default_amount,
+          periodicity: expense.periodicity,
+          target_account_id: expense.target_account_id,
+          is_active: expense.is_active,
+        });
+      } catch (e) {
+        console.error('Supabase addExpense error:', e);
+      }
+    }
   };
 
-  const payDebtInstallment = (debtId: string) => {
+  const payDebtInstallment = async (debtId: string) => {
+    let newPaid = 0;
+    let isCompleted = false;
+
     setDebts((prev) =>
       prev.map((d) => {
         if (d.id === debtId) {
-          const newPaid = Math.min(d.total_installments, d.installments_paid + 1);
-          return {
-            ...d,
-            installments_paid: newPaid,
-            is_completed: newPaid >= d.total_installments,
-          };
+          newPaid = Math.min(d.total_installments, d.installments_paid + 1);
+          isCompleted = newPaid >= d.total_installments;
+          return { ...d, installments_paid: newPaid, is_completed: isCompleted };
         }
         return d;
       })
     );
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from('debt_plans')
+          .update({ installments_paid: newPaid, is_completed: isCompleted })
+          .eq('id', debtId);
+      } catch (e) {
+        console.error('Supabase payDebt error:', e);
+      }
+    }
   };
 
-  const unpayDebtInstallment = (debtId: string) => {
+  const unpayDebtInstallment = async (debtId: string) => {
+    let newPaid = 0;
+
     setDebts((prev) =>
       prev.map((d) => {
         if (d.id === debtId) {
-          const newPaid = Math.max(0, d.installments_paid - 1);
-          return {
-            ...d,
-            installments_paid: newPaid,
-            is_completed: false,
-          };
+          newPaid = Math.max(0, d.installments_paid - 1);
+          return { ...d, installments_paid: newPaid, is_completed: false };
         }
         return d;
       })
     );
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from('debt_plans')
+          .update({ installments_paid: newPaid, is_completed: false })
+          .eq('id', debtId);
+      } catch (e) {
+        console.error('Supabase unpayDebt error:', e);
+      }
+    }
   };
 
-  const addDebt = (debt: Omit<DebtPlan, 'id' | 'installments_paid' | 'is_completed'>) => {
+  const addDebt = async (debt: Omit<DebtPlan, 'id' | 'installments_paid' | 'is_completed'>) => {
     const newDebt: DebtPlan = {
       ...debt,
       id: 'debt-' + Date.now(),
@@ -222,15 +385,40 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       is_completed: false,
     };
     setDebts((prev) => [...prev, newDebt]);
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('debt_plans').insert({
+          title: debt.title,
+          total_amount: debt.total_amount,
+          installment_amount: debt.installment_amount,
+          total_installments: debt.total_installments,
+          installments_paid: 0,
+          start_date: debt.start_date,
+          frequency: debt.frequency,
+          notes: debt.notes,
+        });
+      } catch (e) {
+        console.error('Supabase addDebt error:', e);
+      }
+    }
   };
 
-  const addTransaction = (tx: Omit<Transaction, 'id' | 'created_at'>) => {
+  const addTransaction = async (tx: Omit<Transaction, 'id' | 'created_at'>) => {
     const newTx: Transaction = {
       ...tx,
       id: 'tx-' + Date.now(),
       created_at: new Date().toISOString(),
     };
     setTransactions((prev) => [newTx, ...prev]);
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('transactions').insert(tx);
+      } catch (e) {
+        console.error('Supabase addTransaction error:', e);
+      }
+    }
   };
 
   const resetAllData = () => {
@@ -250,7 +438,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     const grossIncome = cycle ? cycle.gross_income : 0;
     const cycleDateStr = cycle?.cycle_date || '2026-10-30';
 
-    // Calculate applicable fixed expenses for this cycle
     const applicableExpenses = expenses.filter((e) => {
       if (!e.is_active) return false;
       if (e.starts_at && e.starts_at > cycleDateStr) return false;
@@ -258,7 +445,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     });
     const fixedExpensesTotal = applicableExpenses.reduce((sum, e) => sum + e.default_amount, 0);
 
-    // Calculate applicable debts for this cycle date
     let debtInstallmentsTotal = 0;
     debts.forEach((debt) => {
       if (debt.is_completed) return;
@@ -272,11 +458,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           debtInstallmentsTotal += debt.installment_amount;
         }
       } else if (debt.frequency === 'monthly_fixed_day') {
-        // e.g., Cricut on 14th, IA on 13th
-        // If cycle covers around that time or monthly
         const cycleDay = new Date(cycleDateStr).getUTCDate();
         if (debt.fixed_day) {
-          // If cycle date is within 7 days of fixed day or aligns
           const diff = Math.abs(cycleDay - debt.fixed_day);
           if (diff <= 7 || cycleDateStr.includes('11-13') || cycleDateStr.includes('12-11')) {
             debtInstallmentsTotal += debt.installment_amount;
@@ -328,6 +511,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         debts,
         transactions,
         activeCycleId,
+        isCloudSynced,
         setActiveCycleId,
         updateAccountBalance,
         transferFunds,
