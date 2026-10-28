@@ -13,6 +13,13 @@ import {
   Clock,
   HelpCircle,
   Loader2,
+  CheckCircle2,
+  ArrowRight,
+  CreditCard,
+  Receipt,
+  Target,
+  ArrowRightLeft,
+  DollarSign,
 } from 'lucide-react';
 
 interface Message {
@@ -20,25 +27,48 @@ interface Message {
   content: string;
 }
 
+interface ActionPayload {
+  entity: 'gasto' | 'deuda' | 'fijo' | 'meta' | 'transferencia';
+  title: string;
+  summary: string;
+  data: any;
+}
+
 export function AdvisorModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const {
     accounts,
     activeCycle,
     activeCashflow,
+    addTransaction,
+    updateAccountBalance,
+    addDebt,
+    addExpense,
+    goals,
+    addGoal,
+    updateGoalAmount,
+    transferFunds,
   } = useFinance();
 
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: `¡Hola! Soy tu Asesor Financiero Personal impulsado por **Gemini**.
+      content: `¡Hola! Soy tu Asesor Financiero Personal con **Gemini**.
 
-Conozco tu ciclo actual de nómina a **$8,10/h**, tus saldos en Binance (Principal, Subcuenta Hogar blindada y Simple Earn), tus 3 cuotas de Cashea, Cricut y la financiación del teléfono.
+Conozco tu ciclo a **$8,10/h**, tus saldos en Binance, deudas y metas.
 
-¿Qué gasto o compromiso deseas que evaluemos hoy?`,
+Además de evaluar compras, **puedo crear y guardar registros directamente** para ti:
+- *"Gasté $15 en gasolina en la Principal"* (crea un **Gasto**)
+- *"Compré X en Cashea a $40 en 2 cuotas"* (crea una **Deuda**)
+- *"Agrega un fijo de $25 para gimnasio"* (crea un **Gasto Fijo**)
+- *"Aparté $30 para la playa"* (abona a una **Meta**)
+- *"Pasa $82.50 a Hogar"* (hace una **Transferencia**)
+
+¿Qué evaluamos o registramos hoy?`,
     },
   ]);
   const [isLoading, setIsLoading] = useState(false);
+  const [executedActions, setExecutedActions] = useState<Record<number, boolean>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,11 +78,102 @@ Conozco tu ciclo actual de nómina a **$8,10/h**, tus saldos en Binance (Princip
   if (!isOpen) return null;
 
   const quickPrompts = [
-    '¿Me puedo comprar la Epson L3250 a $59 quincenales?',
-    '¿Cuánto puedo aportar a la playa el 13 de noviembre?',
-    '¿Cómo queda mi bolsillo si trabajo 70 horas en vez de 80?',
-    '¿Puedo adelantar una cuota de Cashea hoy?',
+    'Gasté $15 de gasolina en la Principal, anótalo',
+    'Compré $60 en Cashea a 3 cuotas, regístralo',
+    'Aparté $30 para el viaje de la playa',
+    'Pasa $82.50 a la Subcuenta Hogar',
   ];
+
+  const parseMessageContent = (raw: string): { text: string; action: ActionPayload | null } => {
+    const match = raw.match(/```action\s*([\s\S]*?)\s*```/);
+    if (!match) return { text: raw, action: null };
+
+    const text = raw.replace(/```action[\s\S]*?```/, '').trim();
+    try {
+      const action = JSON.parse(match[1]);
+      return { text, action };
+    } catch {
+      return { text: raw, action: null };
+    }
+  };
+
+  const handleExecuteAction = (action: ActionPayload, msgIndex: number) => {
+    if (executedActions[msgIndex]) return;
+
+    try {
+      if (action.entity === 'gasto') {
+        const { amount, account_id, description } = action.data;
+        const targetAcc = accounts.find((a) => a.id === account_id) || accounts[0];
+        const newBal = Math.max(0, targetAcc.current_balance - amount);
+        updateAccountBalance(targetAcc.id, newBal);
+        addTransaction({
+          account_id: targetAcc.id,
+          amount,
+          description: description || action.title,
+          type: 'expense',
+          category: 'Gasto / Asesor IA',
+          is_settled: true,
+        });
+      } else if (action.entity === 'deuda') {
+        const { title, total_amount, installment_amount, total_installments, frequency, notes } = action.data;
+        addDebt({
+          title: title || action.title,
+          total_amount: Number(total_amount),
+          installment_amount: Number(installment_amount),
+          total_installments: Number(total_installments),
+          frequency: frequency || 'biweekly',
+          start_date: new Date().toISOString().split('T')[0],
+          notes: notes || 'Registrado por Asesor IA',
+        });
+      } else if (action.entity === 'fijo') {
+        const { name, default_amount, periodicity } = action.data;
+        addExpense({
+          name: name || action.title,
+          default_amount: Number(default_amount),
+          periodicity: periodicity || 'biweekly',
+          target_account_id: 'acc-principal',
+          is_active: true,
+        });
+      } else if (action.entity === 'meta') {
+        const { goal_id, amount_to_add, title, target_amount } = action.data;
+        if (goal_id) {
+          const g = goals.find((item) => item.id === goal_id);
+          if (g) {
+            updateGoalAmount(g.id, g.current_amount + (Number(amount_to_add) || 0));
+          }
+        } else if (title && target_amount) {
+          addGoal({
+            title,
+            target_amount: Number(target_amount),
+            current_amount: Number(amount_to_add) || 0,
+            category: 'custom',
+          });
+        }
+      } else if (action.entity === 'transferencia') {
+        const { from_account_id, to_account_id, amount, note } = action.data;
+        transferFunds(from_account_id || 'acc-principal', to_account_id || 'acc-hogar', Number(amount), note);
+      }
+
+      setExecutedActions((prev) => ({ ...prev, [msgIndex]: true }));
+    } catch (e: any) {
+      alert('Error ejecutando la acción: ' + e.message);
+    }
+  };
+
+  const getEntityBadge = (entity: ActionPayload['entity']) => {
+    switch (entity) {
+      case 'gasto':
+        return { label: 'GASTO', icon: DollarSign, color: 'text-rose-400 bg-rose-500/10 border-rose-500/20' };
+      case 'deuda':
+        return { label: 'DEUDA / FINANCIAMIENTO', icon: CreditCard, color: 'text-purple-400 bg-purple-500/10 border-purple-500/20' };
+      case 'fijo':
+        return { label: 'GASTO FIJO', icon: Receipt, color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' };
+      case 'meta':
+        return { label: 'META DE AHORRO', icon: Target, color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' };
+      case 'transferencia':
+        return { label: 'TRANSFERENCIA', icon: ArrowRightLeft, color: 'text-sky-400 bg-sky-500/10 border-sky-500/20' };
+    }
+  };
 
   const handleSend = async (textToSend?: string) => {
     const text = textToSend || input;
@@ -88,7 +209,7 @@ Conozco tu ciclo actual de nómina a **$8,10/h**, tus saldos en Binance (Princip
         body: JSON.stringify({
           message: text,
           context: liveContext,
-          history: messages.slice(1), // omit intro
+          history: messages.slice(1),
         }),
       });
 
@@ -109,7 +230,7 @@ Conozco tu ciclo actual de nómina a **$8,10/h**, tus saldos en Binance (Princip
         ...prev,
         {
           role: 'assistant',
-          content: `⚠️ Disculpa, hubo un inconveniente al consultar: ${err.message}. Por favor verifica tu clave GEMINI_API_KEY en .env.local`,
+          content: `⚠️ Hubo un inconveniente al consultar: ${err.message}.`,
         },
       ]);
     } finally {
@@ -129,12 +250,11 @@ Conozco tu ciclo actual de nómina a **$8,10/h**, tus saldos en Binance (Princip
             <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
               Asesor Financiero Gemini
               <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded-full font-mono border border-emerald-500/30">
-                Live
+                Acciones Activas
               </span>
             </h2>
             <p className="text-[11px] text-zinc-400">
-              Contexto en vivo: <strong className="text-emerald-400">${activeCashflow.freePocket.toFixed(2)}</strong> libre ($
-              {activeCashflow.weeklyFreePocket.toFixed(2)}/sem)
+              Crea gastos, deudas, metas y transferencias conversando
             </p>
           </div>
         </div>
@@ -153,46 +273,104 @@ Conozco tu ciclo actual de nómina a **$8,10/h**, tus saldos en Binance (Princip
         <span>·</span>
         <span>Simple Earn (Playa): <strong className="text-indigo-300 font-mono">${accounts.find(a => a.id === 'acc-earn')?.current_balance.toFixed(2)}</strong></span>
         <span>·</span>
-        <span>Bolsillo Principal: <strong className="text-amber-300 font-mono">${accounts.find(a => a.id === 'acc-principal')?.current_balance.toFixed(2)}</strong></span>
+        <span>Bolsillo: <strong className="text-emerald-400 font-mono">${activeCashflow.freePocket.toFixed(2)}</strong> (${activeCashflow.weeklyFreePocket.toFixed(2)}/sem)</span>
       </div>
 
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((m, idx) => (
-          <div
-            key={idx}
-            className={`flex gap-3 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            {m.role === 'assistant' && (
-              <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center flex-shrink-0 mt-1">
-                <Bot className="w-4 h-4 text-emerald-400" />
-              </div>
-            )}
+        {messages.map((m, idx) => {
+          const { text, action } = parseMessageContent(m.content);
+          const isExecuted = executedActions[idx];
 
+          return (
             <div
-              className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs leading-relaxed ${
-                m.role === 'user'
-                  ? 'bg-emerald-600 text-black font-medium'
-                  : 'bg-zinc-900 border border-zinc-800 text-zinc-200 shadow-md whitespace-pre-line'
-              }`}
+              key={idx}
+              className={`flex gap-3 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
-              {m.content}
-            </div>
+              {m.role === 'assistant' && (
+                <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center flex-shrink-0 mt-1">
+                  <Bot className="w-4 h-4 text-emerald-400" />
+                </div>
+              )}
 
-            {m.role === 'user' && (
-              <div className="w-7 h-7 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center flex-shrink-0 mt-1">
-                <User className="w-4 h-4 text-zinc-300" />
+              <div className="max-w-[88%] space-y-2.5">
+                {/* Text Bubble */}
+                <div
+                  className={`rounded-2xl px-4 py-3 text-xs leading-relaxed ${
+                    m.role === 'user'
+                      ? 'bg-emerald-600 text-black font-medium'
+                      : 'bg-zinc-900 border border-zinc-800 text-zinc-200 shadow-md whitespace-pre-line'
+                  }`}
+                >
+                  {text}
+                </div>
+
+                {/* Interactive Entity Creation Card */}
+                {action && (
+                  <div className="bg-zinc-900 border-2 border-zinc-700/80 rounded-2xl p-3.5 shadow-xl space-y-2.5 animate-in zoom-in-95">
+                    {(() => {
+                      const badge = getEntityBadge(action.entity);
+                      const Icon = badge.icon;
+                      return (
+                        <div className="flex items-center justify-between">
+                          <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold font-mono px-2 py-0.5 rounded-full border ${badge.color}`}>
+                            <Icon className="w-3 h-3" />
+                            {badge.label}
+                          </span>
+                          <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">
+                            Acción Propuesta
+                          </span>
+                        </div>
+                      );
+                    })()}
+
+                    <div>
+                      <h4 className="text-xs font-bold text-white">{action.title}</h4>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">{action.summary}</p>
+                    </div>
+
+                    {/* Action Execution Button */}
+                    <button
+                      type="button"
+                      disabled={isExecuted}
+                      onClick={() => handleExecuteAction(action, idx)}
+                      className={`w-full py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 ${
+                        isExecuted
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 cursor-default'
+                          : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20'
+                      }`}
+                    >
+                      {isExecuted ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>¡{action.entity.toUpperCase()} CREADO EXITOSAMENTE!</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Crear {action.entity.toUpperCase()}</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        ))}
+
+              {m.role === 'user' && (
+                <div className="w-7 h-7 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center flex-shrink-0 mt-1">
+                  <User className="w-4 h-4 text-zinc-300" />
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         {isLoading && (
           <div className="flex gap-3 items-center text-xs text-zinc-400 animate-pulse">
             <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
               <Loader2 className="w-4 h-4 text-emerald-400 animate-spin" />
             </div>
-            <span>Calculando impacto en flujo quincenal y margen libre...</span>
+            <span>Analizando impacto y preparando entidad...</span>
           </div>
         )}
 
@@ -227,7 +405,7 @@ Conozco tu ciclo actual de nómina a **$8,10/h**, tus saldos en Binance (Princip
             value={input}
             disabled={isLoading}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Pregunta o simula un gasto (ej. ¿Puedo asumir $40?)..."
+            placeholder="Dile a Gemini: 'Gasté $15...', 'Anota deuda...', 'Abona $20 a meta'..."
             className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
           />
           <button
