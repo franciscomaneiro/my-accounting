@@ -29,6 +29,7 @@ export interface ExpenseCategory {
   name: string;
   default_amount: number;
   periodicity: ExpensePeriodicity;
+  fixed_day?: number;
   target_account_id?: string;
   is_active: boolean;
   starts_at?: string; // Optional start date

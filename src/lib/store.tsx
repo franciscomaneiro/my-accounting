@@ -77,8 +77,27 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
       if (storedAccounts) setAccounts(JSON.parse(storedAccounts));
       if (storedCycles) setCycles(JSON.parse(storedCycles));
-      if (storedExpenses) setExpenses(JSON.parse(storedExpenses));
-      if (storedDebts) setDebts(JSON.parse(storedDebts));
+      if (storedExpenses) {
+        const parsedExpenses = JSON.parse(storedExpenses);
+        if (!parsedExpenses.some((e: any) => e.id === 'exp-ia' || e.name?.toLowerCase().includes('ia'))) {
+          parsedExpenses.push({
+            id: 'exp-ia',
+            name: 'Suscripción IA Pro',
+            default_amount: 20.00,
+            periodicity: 'monthly',
+            fixed_day: 13,
+            target_account_id: 'acc-principal',
+            is_active: true,
+            icon: 'Bot',
+            note: 'Cobro fijo mensual los días 13 de cada mes',
+          });
+        }
+        setExpenses(parsedExpenses);
+      }
+      if (storedDebts) {
+        const parsedDebts = JSON.parse(storedDebts).filter((d: any) => d.id !== 'debt-ia');
+        setDebts(parsedDebts);
+      }
       if (storedTx) setTransactions(JSON.parse(storedTx));
       if (storedActiveCycle) setActiveCycleId(storedActiveCycle);
     } catch (e) {
@@ -441,6 +460,13 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     const applicableExpenses = expenses.filter((e) => {
       if (!e.is_active) return false;
       if (e.starts_at && e.starts_at > cycleDateStr) return false;
+      if (e.periodicity === 'monthly') {
+        const cycleDay = new Date(cycleDateStr + 'T00:00:00').getUTCDate();
+        if (e.fixed_day) {
+          const diff = Math.abs(cycleDay - e.fixed_day);
+          return diff <= 7 || cycleDateStr.includes('11-13') || cycleDateStr.includes('12-11');
+        }
+      }
       return true;
     });
     const fixedExpensesTotal = applicableExpenses.reduce((sum, e) => sum + e.default_amount, 0);

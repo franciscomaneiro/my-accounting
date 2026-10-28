@@ -9,6 +9,7 @@ import {
   Fuel,
   Cat,
   Sparkles,
+  Bot,
   Receipt,
   Plus,
   Check,
@@ -31,6 +32,7 @@ export function ExpensesSection() {
     if (n.includes('servicio') || n.includes('internet')) return <Wifi className="w-4 h-4 text-sky-400" />;
     if (n.includes('gasolina') || n.includes('corsa')) return <Fuel className="w-4 h-4 text-rose-400" />;
     if (n.includes('gato')) return <Cat className="w-4 h-4 text-orange-400" />;
+    if (n.includes('ia') || n.includes('suscrip')) return <Bot className="w-4 h-4 text-indigo-400" />;
     return <Sparkles className="w-4 h-4 text-purple-400" />;
   };
 
@@ -70,9 +72,9 @@ export function ExpensesSection() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-            Gastos Fijos Quincenales
+            Gastos Fijos & Suscripciones
           </h2>
-          <p className="text-xs text-zinc-400">Compromisos ineludibles por ciclo de nómina</p>
+          <p className="text-xs text-zinc-400">Compromisos recurrentes (Alquiler, Mercado, IA...)</p>
         </div>
 
         <button
@@ -113,6 +115,11 @@ export function ExpensesSection() {
               <div>
                 <p className="text-xs font-medium text-white flex items-center gap-1.5">
                   {exp.name}
+                  {exp.periodicity === 'monthly' && (
+                    <span className="text-[10px] text-indigo-400/90 bg-indigo-500/10 px-1.5 py-0.2 rounded border border-indigo-500/20">
+                      Mensual · Día {exp.fixed_day || 13}
+                    </span>
+                  )}
                   {exp.starts_at && (
                     <span className="text-[10px] text-amber-400/90 bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">
                       Desde {exp.starts_at}

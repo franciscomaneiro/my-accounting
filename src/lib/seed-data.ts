@@ -138,6 +138,17 @@ export const INITIAL_EXPENSE_CATEGORIES: ExpenseCategory[] = [
     icon: 'Sparkles',
     note: 'Inicia el 13 de noviembre ($15 quincenal o $30 mensual)',
   },
+  {
+    id: 'exp-ia',
+    name: 'Suscripción IA Pro',
+    default_amount: 20.00,
+    periodicity: 'monthly',
+    fixed_day: 13,
+    target_account_id: 'acc-principal',
+    is_active: true,
+    icon: 'Bot',
+    note: 'Cobro fijo mensual los días 13 de cada mes',
+  },
 ];
 
 export const INITIAL_DEBTS: DebtPlan[] = [
@@ -178,19 +189,6 @@ export const INITIAL_DEBTS: DebtPlan[] = [
     frequency: 'biweekly',
     is_completed: false,
     notes: 'Inicial $500 ($300 puente Simple Earn + $50 el 30 Oct + $150 el 13 Nov); restante $400 @ $100/quincena',
-  },
-  {
-    id: 'debt-ia',
-    title: 'Suscripción IA Pro',
-    total_amount: 120.00,
-    installment_amount: 20.00,
-    total_installments: 6,
-    installments_paid: 0,
-    start_date: '2026-11-13',
-    frequency: 'monthly_fixed_day',
-    fixed_day: 13,
-    is_completed: false,
-    notes: 'Cobro fijo mensual los días 13 de cada mes',
   },
 ];
 

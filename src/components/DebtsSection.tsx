@@ -66,9 +66,9 @@ export function DebtsSection() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-            Compromisos & Deudas Vivas
+            Deudas & Cuotas a Finiquitar
           </h2>
-          <p className="text-xs text-zinc-400">Seguimiento de cuotas, Cashea y financiamiento</p>
+          <p className="text-xs text-zinc-400">Créditos con saldo finito (Cashea, Cricut, Teléfono...)</p>
         </div>
 
         <button
