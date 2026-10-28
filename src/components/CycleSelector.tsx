@@ -6,12 +6,16 @@ import { Calendar, Clock, DollarSign } from 'lucide-react';
 
 export function CycleSelector() {
   const { cycles, activeCycleId, setActiveCycleId, updateCycleHours, activeCycle } = useFinance();
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const getDaysDiff = (dateStr: string) => {
+    if (!mounted) return 'Calculando...';
     const target = new Date(dateStr + 'T00:00:00');
-    // Default reference date 2026-10-28 or today
     const now = new Date();
-    // Use target minus today
     const diffTime = target.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     if (diffDays === 0) return 'Hoy es día de cobro';
