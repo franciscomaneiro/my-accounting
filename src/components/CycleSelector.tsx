@@ -5,13 +5,10 @@ import { useFinance } from '@/lib/store';
 import {
   Calendar,
   Clock,
-  DollarSign,
   ChevronDown,
-  Sparkles,
   Check,
   Plus,
   Minus,
-  TrendingUp,
 } from 'lucide-react';
 
 export function CycleSelector() {
@@ -47,15 +44,13 @@ export function CycleSelector() {
 
   const currentCycle = activeCycle || cycles[0];
   const hours = currentCycle.hours_worked || 0;
-  const extraHours = Math.max(0, hours - 80);
-  const extraIncome = extraHours * 8.10;
 
   return (
     <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 border border-zinc-800 rounded-3xl p-5 shadow-xl relative overflow-hidden">
-      {/* Decorative background glow */}
+      {/* Glow decorativo sutil */}
       <div className="absolute top-0 right-0 w-36 h-36 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none" />
 
-      {/* Header: Caja de la Quincena + Dropdown de Proyección */}
+      {/* Header: Caja de la Quincena + Selector de Quincena */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
@@ -71,7 +66,7 @@ export function CycleSelector() {
           </div>
         </div>
 
-        {/* Proyectar otra quincena */}
+        {/* Dropdown discreto para alternar quincenas */}
         <div className="relative">
           <button
             type="button"
@@ -85,7 +80,7 @@ export function CycleSelector() {
           {isProjectionOpen && (
             <div className="absolute right-0 mt-1.5 w-48 bg-zinc-900 border border-zinc-800 rounded-2xl p-1.5 shadow-2xl z-30 animate-in fade-in">
               <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold px-2 py-1">
-                Elegir quincena a gestionar
+                Elegir quincena
               </div>
               {cycles.map((c) => (
                 <button
@@ -112,50 +107,40 @@ export function CycleSelector() {
         </div>
       </div>
 
-      {/* Hero del Cobro: Monto exacto calculado a $8,10/h */}
+      {/* Hero Card: Próximo cobro y monto resultante */}
       <div className="bg-zinc-950/70 border border-zinc-800/80 rounded-2xl p-4 mb-4">
-        <div className="flex items-baseline justify-between mb-1">
-          <div>
-            <div className="flex items-center gap-1.5 text-xs text-zinc-400 mb-1">
-              <Clock className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Próximo cobro: <strong className="text-zinc-200">{formatDateHuman(currentCycle.cycle_date)}</strong></span>
-              <span className="text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.2 rounded-full">
-                {getDaysDiff(currentCycle.cycle_date)}
-              </span>
-            </div>
-
-            <div className="text-3xl font-extrabold font-mono tracking-tight text-white flex items-baseline gap-1.5">
-              ${currentCycle.gross_income.toFixed(2)}
-              <span className="text-sm font-normal text-zinc-400 font-sans">USDT</span>
-            </div>
+        {/* Fila 1: Fecha a la izquierda y días restantes a la derecha (sin colisiones) */}
+        <div className="flex items-center justify-between text-xs text-zinc-400 mb-2">
+          <div className="flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Próximo cobro: <strong className="text-zinc-100">{formatDateHuman(currentCycle.cycle_date)}</strong></span>
           </div>
-
-          <div className="text-right">
-            <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900 border border-zinc-800 px-2 py-1 rounded-lg block">
-              $8,10 / hora
-            </span>
-            {extraHours > 0 && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full mt-1.5 font-medium">
-                <TrendingUp className="w-3 h-3" />
-                +{extraHours}h extra (+${extraIncome.toFixed(2)})
-              </span>
-            )}
-          </div>
+          <span className="text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-medium">
+            {getDaysDiff(currentCycle.cycle_date)}
+          </span>
         </div>
 
-        <p className="text-[11px] text-zinc-500">
-          {hours} horas liquidadas a tarifa plana de $8,10/h
-        </p>
+        {/* Fila 2: Monto en grande y tarifa fija */}
+        <div className="flex items-baseline justify-between pt-1">
+          <div className="text-3xl font-extrabold font-mono tracking-tight text-white flex items-baseline gap-1.5">
+            ${currentCycle.gross_income.toFixed(2)}
+            <span className="text-xs font-normal text-zinc-400 font-sans">USDT</span>
+          </div>
+
+          <div className="text-right text-xs font-mono text-zinc-400">
+            Tarifa: <span className="text-zinc-200 font-semibold">$8,10 / h</span>
+          </div>
+        </div>
       </div>
 
-      {/* Control interactivo flexible: Input numérico directo + Stepper + Slider */}
-      <div className="space-y-3 bg-zinc-900/60 border border-zinc-800/60 rounded-2xl p-3.5">
+      {/* Control simple y limpio de horas: Stepper + Slider */}
+      <div className="space-y-3 bg-zinc-900/60 border border-zinc-800/60 rounded-2xl p-4">
         <div className="flex items-center justify-between">
           <label className="text-xs text-zinc-300 font-medium">
-            Horas trabajadas en esta quincena:
+            Horas trabajadas:
           </label>
 
-          {/* Stepper y campo numérico editable libremente */}
+          {/* Stepper con campo numérico editable */}
           <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-700/80 rounded-xl p-1">
             <button
               type="button"
@@ -166,7 +151,7 @@ export function CycleSelector() {
               <Minus className="w-3.5 h-3.5" />
             </button>
 
-            <div className="flex items-baseline px-1.5">
+            <div className="flex items-baseline px-2">
               <input
                 type="number"
                 min="0"
@@ -193,62 +178,16 @@ export function CycleSelector() {
           </div>
         </div>
 
-        {/* Deslizador amplio (soporta hasta 140 horas) */}
+        {/* Deslizador fluido */}
         <input
           type="range"
-          min="20"
-          max="140"
-          step="1"
-          value={Math.min(140, hours)}
+          min="0"
+          max="150"
+          step="0.5"
+          value={hours}
           onChange={(e) => updateCycleHours(currentCycle.id, parseFloat(e.target.value) || 0)}
           className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
         />
-
-        {/* Botones de acceso rápido para ajustes comunes */}
-        <div className="flex items-center justify-between gap-1.5 pt-1">
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => updateCycleHours(currentCycle.id, 56)}
-              className={`px-2 py-1 text-xs font-mono rounded-lg border transition-all ${
-                hours === 56
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-semibold'
-                  : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-zinc-200'
-              }`}
-            >
-              56h
-            </button>
-            <button
-              type="button"
-              onClick={() => updateCycleHours(currentCycle.id, 80)}
-              className={`px-2 py-1 text-xs font-mono rounded-lg border transition-all ${
-                hours === 80
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-semibold'
-                  : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-zinc-200'
-              }`}
-            >
-              80h (Base)
-            </button>
-          </div>
-
-          <div className="flex items-center gap-1 text-xs font-mono">
-            <span className="text-[11px] text-zinc-500 mr-1">Sumar extra:</span>
-            <button
-              type="button"
-              onClick={() => updateCycleHours(currentCycle.id, hours + 4)}
-              className="px-2 py-1 text-xs bg-zinc-950 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded-lg active:scale-95 transition-all"
-            >
-              +4h
-            </button>
-            <button
-              type="button"
-              onClick={() => updateCycleHours(currentCycle.id, hours + 8)}
-              className="px-2 py-1 text-xs bg-zinc-950 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded-lg active:scale-95 transition-all"
-            >
-              +8h
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );
