@@ -1,4 +1,4 @@
-import { Account, DebtPlan, ExpenseCategory, PayrollCycle, Transaction } from '@/types';
+import { Account, DebtPlan, ExpenseCategory, PayrollCycle, Transaction, FinancialGoal } from '@/types';
 
 export const INITIAL_ACCOUNTS: Account[] = [
   {
@@ -222,5 +222,28 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
     type: 'income',
     is_settled: true,
     created_at: '2026-10-25T12:00:00Z',
+  },
+];
+
+export const INITIAL_GOALS: FinancialGoal[] = [
+  {
+    id: 'goal-playa',
+    title: 'Viaje a la Playa (18 Dic)',
+    target_amount: 400.00,
+    current_amount: 308.93,
+    target_date: '2026-12-18',
+    category: 'trip',
+    notes: 'Preservar y robustecer fondo en Simple Earn para el viaje del 18 de diciembre.',
+    is_completed: false,
+  },
+  {
+    id: 'goal-corsa',
+    title: 'Mantenimiento Corsa',
+    target_amount: 150.00,
+    current_amount: 60.00,
+    target_date: '2026-11-27',
+    category: 'car',
+    notes: 'Tren delantero y servicio preventivo del vehículo.',
+    is_completed: false,
   },
 ];

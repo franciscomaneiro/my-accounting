@@ -8,6 +8,7 @@ import {
   DebtPlan,
   Transaction,
   CashflowSummary,
+  FinancialGoal,
 } from '@/types';
 import {
   INITIAL_ACCOUNTS,
@@ -15,6 +16,7 @@ import {
   INITIAL_EXPENSE_CATEGORIES,
   INITIAL_DEBTS,
   INITIAL_TRANSACTIONS,
+  INITIAL_GOALS,
 } from './seed-data';
 import { supabase, isSupabaseConfigured } from './supabase';
 
@@ -38,6 +40,10 @@ interface FinanceContextType {
   unpayDebtInstallment: (debtId: string) => void;
   addDebt: (debt: Omit<DebtPlan, 'id' | 'installments_paid' | 'is_completed'>) => void;
   deleteDebt: (debtId: string) => void;
+  goals: FinancialGoal[];
+  addGoal: (goal: Omit<FinancialGoal, 'id' | 'is_completed'>) => void;
+  updateGoalAmount: (goalId: string, newAmount: number) => void;
+  deleteGoal: (goalId: string) => void;
   addTransaction: (tx: Omit<Transaction, 'id' | 'created_at'>) => void;
   resetAllData: () => void;
   getCashflowForCycle: (cycleId: string) => CashflowSummary;
@@ -51,6 +57,7 @@ const STORAGE_KEYS = {
   CYCLES: 'cashflow_cycles_v1',
   EXPENSES: 'cashflow_expenses_v1',
   DEBTS: 'cashflow_debts_v1',
+  GOALS: 'cashflow_goals_v1',
   TRANSACTIONS: 'cashflow_transactions_v1',
   ACTIVE_CYCLE: 'cashflow_active_cycle_v1',
 };
@@ -64,6 +71,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [cycles, setCycles] = useState<PayrollCycle[]>(INITIAL_CYCLES);
   const [expenses, setExpenses] = useState<ExpenseCategory[]>(INITIAL_EXPENSE_CATEGORIES);
   const [debts, setDebts] = useState<DebtPlan[]>(INITIAL_DEBTS);
+  const [goals, setGoals] = useState<FinancialGoal[]>(INITIAL_GOALS);
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [activeCycleId, setActiveCycleId] = useState<string>('cycle-2026-10-30');
 
@@ -74,11 +82,13 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       const storedCycles = localStorage.getItem(STORAGE_KEYS.CYCLES);
       const storedExpenses = localStorage.getItem(STORAGE_KEYS.EXPENSES);
       const storedDebts = localStorage.getItem(STORAGE_KEYS.DEBTS);
+      const storedGoals = localStorage.getItem(STORAGE_KEYS.GOALS);
       const storedTx = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
       const storedActiveCycle = localStorage.getItem(STORAGE_KEYS.ACTIVE_CYCLE);
 
       if (storedAccounts) setAccounts(JSON.parse(storedAccounts));
       if (storedCycles) setCycles(JSON.parse(storedCycles));
+      if (storedGoals) setGoals(JSON.parse(storedGoals));
       if (storedExpenses) {
         const parsedExpenses = JSON.parse(storedExpenses);
         if (!parsedExpenses.some((e: any) => e.id === 'exp-ia' || e.name?.toLowerCase().includes('ia'))) {
@@ -183,12 +193,13 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(STORAGE_KEYS.CYCLES, JSON.stringify(cycles));
       localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
       localStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
+      localStorage.setItem(STORAGE_KEYS.GOALS, JSON.stringify(goals));
       localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
       localStorage.setItem(STORAGE_KEYS.ACTIVE_CYCLE, activeCycleId);
     } catch (e) {
       console.error('Error saving data to local storage', e);
     }
-  }, [accounts, cycles, expenses, debts, transactions, activeCycleId, isLoaded]);
+  }, [accounts, cycles, expenses, debts, goals, transactions, activeCycleId, isLoaded]);
 
   // Actions with Supabase background sync
   const updateAccountBalance = async (id: string, newBalance: number) => {
@@ -447,6 +458,35 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const addGoal = (goal: Omit<FinancialGoal, 'id' | 'is_completed'>) => {
+    const newGoal: FinancialGoal = {
+      ...goal,
+      id: 'goal-' + Date.now(),
+      is_completed: goal.current_amount >= goal.target_amount,
+    };
+    setGoals((prev) => [newGoal, ...prev]);
+  };
+
+  const updateGoalAmount = (goalId: string, newAmount: number) => {
+    setGoals((prev) =>
+      prev.map((g) => {
+        if (g.id === goalId) {
+          const clamped = Math.max(0, newAmount);
+          return {
+            ...g,
+            current_amount: clamped,
+            is_completed: clamped >= g.target_amount,
+          };
+        }
+        return g;
+      })
+    );
+  };
+
+  const deleteGoal = (goalId: string) => {
+    setGoals((prev) => prev.filter((g) => g.id !== goalId));
+  };
+
   const addTransaction = async (tx: Omit<Transaction, 'id' | 'created_at'>) => {
     const newTx: Transaction = {
       ...tx,
@@ -469,6 +509,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setCycles(INITIAL_CYCLES);
     setExpenses(INITIAL_EXPENSE_CATEGORIES);
     setDebts(INITIAL_DEBTS);
+    setGoals(INITIAL_GOALS);
     setTransactions(INITIAL_TRANSACTIONS);
     setActiveCycleId('cycle-2026-10-30');
     try {
@@ -559,6 +600,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         cycles,
         expenses,
         debts,
+        goals,
         transactions,
         activeCycleId,
         isCloudSynced,
@@ -574,6 +616,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         unpayDebtInstallment,
         addDebt,
         deleteDebt,
+        addGoal,
+        updateGoalAmount,
+        deleteGoal,
         addTransaction,
         resetAllData,
         getCashflowForCycle,

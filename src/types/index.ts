@@ -69,6 +69,17 @@ export interface Transaction {
   created_at: string;
 }
 
+export interface FinancialGoal {
+  id: string;
+  title: string;
+  target_amount: number;
+  current_amount: number;
+  target_date?: string;
+  category: 'trip' | 'car' | 'tech' | 'emergency' | 'custom';
+  notes?: string;
+  is_completed?: boolean;
+}
+
 export interface CashflowSummary {
   grossIncome: number;
   fixedExpensesTotal: number;

@@ -5,11 +5,12 @@ import {
   LayoutDashboard,
   Wallet,
   CreditCard,
+  Target,
   Receipt,
   Sparkles,
 } from 'lucide-react';
 
-export type TabType = 'dashboard' | 'accounts' | 'debts' | 'expenses';
+export type TabType = 'dashboard' | 'accounts' | 'debts' | 'goals' | 'expenses';
 
 export function BottomNav({
   activeTab,
@@ -24,6 +25,7 @@ export function BottomNav({
     { id: 'dashboard', label: 'Quincena', icon: LayoutDashboard },
     { id: 'accounts', label: 'Cuentas', icon: Wallet },
     { id: 'debts', label: 'Deudas', icon: CreditCard },
+    { id: 'goals', label: 'Metas', icon: Target },
     { id: 'expenses', label: 'Fijos', icon: Receipt },
   ];
 
