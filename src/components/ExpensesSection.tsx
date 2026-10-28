@@ -14,11 +14,12 @@ import {
   Plus,
   Check,
   Edit2,
+  Trash2,
   X,
 } from 'lucide-react';
 
 export function ExpensesSection() {
-  const { expenses, toggleExpense, updateExpenseAmount, addExpense } = useFinance();
+  const { expenses, toggleExpense, updateExpenseAmount, addExpense, deleteExpense } = useFinance();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempAmount, setTempAmount] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -162,8 +163,20 @@ export function ExpensesSection() {
                   <button
                     onClick={() => handleStartEdit(exp.id, exp.default_amount)}
                     className="p-1 text-zinc-500 hover:text-zinc-300"
+                    title="Editar monto"
                   >
                     <Edit2 className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm(`¿Eliminar "${exp.name}"?`)) {
+                        deleteExpense(exp.id);
+                      }
+                    }}
+                    className="p-1 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 rounded"
+                    title="Eliminar gasto"
+                  >
+                    <Trash2 className="w-3 h-3" />
                   </button>
                 </div>
               )}

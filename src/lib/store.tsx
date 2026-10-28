@@ -33,9 +33,11 @@ interface FinanceContextType {
   toggleExpense: (id: string) => void;
   updateExpenseAmount: (id: string, amount: number) => void;
   addExpense: (expense: Omit<ExpenseCategory, 'id'>) => void;
+  deleteExpense: (id: string) => void;
   payDebtInstallment: (debtId: string) => void;
   unpayDebtInstallment: (debtId: string) => void;
   addDebt: (debt: Omit<DebtPlan, 'id' | 'installments_paid' | 'is_completed'>) => void;
+  deleteDebt: (debtId: string) => void;
   addTransaction: (tx: Omit<Transaction, 'id' | 'created_at'>) => void;
   resetAllData: () => void;
   getCashflowForCycle: (cycleId: string) => CashflowSummary;
@@ -344,6 +346,17 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const deleteExpense = async (id: string) => {
+    setExpenses((prev) => prev.filter((e) => e.id !== id));
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('expense_categories').delete().eq('id', id);
+      } catch (e) {
+        console.error('Supabase deleteExpense error:', e);
+      }
+    }
+  };
+
   const payDebtInstallment = async (debtId: string) => {
     let newPaid = 0;
     let isCompleted = false;
@@ -419,6 +432,17 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         });
       } catch (e) {
         console.error('Supabase addDebt error:', e);
+      }
+    }
+  };
+
+  const deleteDebt = async (debtId: string) => {
+    setDebts((prev) => prev.filter((d) => d.id !== debtId));
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('debt_plans').delete().eq('id', debtId);
+      } catch (e) {
+        console.error('Supabase deleteDebt error:', e);
       }
     }
   };
@@ -545,9 +569,11 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         toggleExpense,
         updateExpenseAmount,
         addExpense,
+        deleteExpense,
         payDebtInstallment,
         unpayDebtInstallment,
         addDebt,
+        deleteDebt,
         addTransaction,
         resetAllData,
         getCashflowForCycle,

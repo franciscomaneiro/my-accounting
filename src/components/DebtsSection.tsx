@@ -13,11 +13,12 @@ import {
   Scissors,
   ShoppingBag,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import { DebtPlan } from '@/types';
 
 export function DebtsSection() {
-  const { debts, payDebtInstallment, unpayDebtInstallment, addDebt } = useFinance();
+  const { debts, payDebtInstallment, unpayDebtInstallment, addDebt, deleteDebt } = useFinance();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   // Form state
@@ -123,11 +124,27 @@ export function DebtsSection() {
                   </div>
                 </div>
 
-                <div className="text-right">
-                  <div className="text-sm font-mono font-bold text-zinc-200">
-                    ${remainingAmount.toFixed(2)}
+                <div className="flex items-start gap-2">
+                  <div className="text-right">
+                    <div className="text-sm font-mono font-bold text-zinc-200">
+                      ${remainingAmount.toFixed(2)}
+                    </div>
+                    <div className="text-[10px] text-zinc-500">Saldo pendiente</div>
                   </div>
-                  <div className="text-[10px] text-zinc-500">Saldo pendiente</div>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm(`¿Estás seguro de que deseas eliminar "${debt.title}"?`)) {
+                        deleteDebt(debt.id);
+                      }
+                    }}
+                    className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors active:scale-95 ml-1"
+                    title="Eliminar este compromiso"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
 
