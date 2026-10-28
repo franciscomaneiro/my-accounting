@@ -7,19 +7,29 @@ import {
   Home,
   PiggyBank,
   ArrowRightLeft,
-  Edit2,
-  Check,
+  ChevronRight,
+  Plus,
+  Minus,
   X,
   ShieldCheck,
-  Sparkles,
+  History,
+  TrendingUp,
+  TrendingDown,
+  Clock,
 } from 'lucide-react';
+import { Account, Transaction } from '@/types';
 
 export function AccountsSection() {
-  const { accounts, updateAccountBalance, transferFunds } = useFinance();
+  const { accounts, updateAccountBalance, transferFunds, transactions, addTransaction } = useFinance();
 
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
-  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
-  const [tempBalance, setTempBalance] = useState<string>('');
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+
+  // New movement state inside account detail
+  const [isAddingMovement, setIsAddingMovement] = useState(false);
+  const [movementType, setMovementType] = useState<'income' | 'expense'>('income');
+  const [movementAmount, setMovementAmount] = useState('');
+  const [movementDescription, setMovementDescription] = useState('');
 
   // Transfer form state
   const [fromAccountId, setFromAccountId] = useState('acc-principal');
@@ -34,22 +44,9 @@ export function AccountsSection() {
   };
 
   const getCardBorder = (name: string) => {
-    if (name.includes('Hogar')) return 'border-emerald-500/30 bg-emerald-950/10';
-    if (name.includes('Simple Earn')) return 'border-indigo-500/30 bg-indigo-950/10';
-    return 'border-amber-500/30 bg-amber-950/10';
-  };
-
-  const handleStartEdit = (accId: string, currentVal: number) => {
-    setEditingAccountId(accId);
-    setTempBalance(currentVal.toString());
-  };
-
-  const handleSaveBalance = (accId: string) => {
-    const val = parseFloat(tempBalance);
-    if (!isNaN(val)) {
-      updateAccountBalance(accId, val);
-    }
-    setEditingAccountId(null);
+    if (name.includes('Hogar')) return 'border-emerald-500/30 bg-emerald-950/10 hover:border-emerald-500/50';
+    if (name.includes('Simple Earn')) return 'border-indigo-500/30 bg-indigo-950/10 hover:border-indigo-500/50';
+    return 'border-amber-500/30 bg-amber-950/10 hover:border-amber-500/50';
   };
 
   const handleExecuteTransfer = (e: React.FormEvent) => {
@@ -61,14 +58,61 @@ export function AccountsSection() {
     }
   };
 
+  const handleSaveMovement = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAccount) return;
+    const amount = parseFloat(movementAmount);
+    if (isNaN(amount) || amount <= 0 || !movementDescription.trim()) return;
+
+    const newBalance =
+      movementType === 'income'
+        ? selectedAccount.current_balance + amount
+        : Math.max(0, selectedAccount.current_balance - amount);
+
+    updateAccountBalance(selectedAccount.id, newBalance);
+
+    addTransaction({
+      account_id: selectedAccount.id,
+      amount,
+      description: movementDescription.trim(),
+      type: movementType,
+      category: movementType === 'income' ? 'Ingreso / Ajuste' : 'Gasto / Ajuste',
+      is_settled: true,
+    });
+
+    // Update local modal state
+    setSelectedAccount({
+      ...selectedAccount,
+      current_balance: newBalance,
+      updated_at: new Date().toISOString(),
+    });
+
+    setIsAddingMovement(false);
+    setMovementAmount('');
+    setMovementDescription('');
+  };
+
+  // Filter transactions for selected account
+  const accountTransactions = selectedAccount
+    ? transactions.filter(
+        (t) => t.account_id === selectedAccount.id || t.to_account_id === selectedAccount.id
+      )
+    : [];
+
+  const formatDate = (isoString: string) => {
+    const d = new Date(isoString);
+    return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  };
+
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-bold text-white uppercase tracking-wider">
             Cuentas & Fondos en Binance
           </h2>
-          <p className="text-xs text-zinc-400">Estructura multicuenta y reservas blindadas</p>
+          <p className="text-xs text-zinc-400">Toca una cuenta para ver su historial y movimientos</p>
         </div>
 
         <button
@@ -100,16 +144,22 @@ export function AccountsSection() {
         </button>
       </div>
 
-      {/* Account Cards */}
+      {/* Account Cards (Tappable to see history and register movements) */}
       <div className="space-y-2.5">
         {accounts.map((acc) => (
           <div
             key={acc.id}
-            className={`border rounded-2xl p-4 transition-all ${getCardBorder(acc.name)}`}
+            onClick={() => {
+              setSelectedAccount(acc);
+              setIsAddingMovement(false);
+            }}
+            className={`border rounded-2xl p-4 transition-all cursor-pointer active:scale-[0.99] group ${getCardBorder(
+              acc.name
+            )}`}
           >
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-zinc-900 border border-zinc-800">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 group-hover:border-zinc-700 transition-colors">
                   {getAccountIcon(acc.name)}
                 </div>
                 <div>
@@ -126,56 +176,208 @@ export function AccountsSection() {
                       </span>
                     )}
                   </h3>
-                  <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">{acc.purpose}</p>
+                  <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug line-clamp-1">
+                    {acc.purpose}
+                  </p>
                 </div>
               </div>
 
-              {/* Balance & Edit */}
-              <div className="text-right">
-                {editingAccountId === acc.id ? (
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={tempBalance}
-                      onChange={(e) => setTempBalance(e.target.value)}
-                      className="w-24 bg-zinc-900 text-white font-mono text-sm px-2 py-1 rounded-lg border border-emerald-500 focus:outline-none"
-                    />
-                    <button
-                      onClick={() => handleSaveBalance(acc.id)}
-                      className="p-1 bg-emerald-500 text-black rounded-lg"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => setEditingAccountId(null)}
-                      className="p-1 bg-zinc-800 text-zinc-400 rounded-lg"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
+              {/* Balance & Arrow */}
+              <div className="flex items-center gap-2 pl-2">
+                <div className="text-right">
+                  <div className="text-lg font-mono font-bold text-white">
+                    ${acc.current_balance.toFixed(2)}
                   </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 group">
-                    <div>
-                      <div className="text-lg font-mono font-bold text-white">
-                        ${acc.current_balance.toFixed(2)}
-                      </div>
-                      <span className="text-[10px] font-mono text-zinc-400">{acc.currency}</span>
-                    </div>
-                    <button
-                      onClick={() => handleStartEdit(acc.id, acc.current_balance)}
-                      className="p-1 text-zinc-500 hover:text-zinc-200 transition-colors"
-                      title="Ajustar saldo"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
+                  <span className="text-[10px] font-mono text-zinc-400">USDT</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:text-zinc-300 transition-colors" />
               </div>
             </div>
           </div>
         ))}
       </div>
+
+      {/* Account Detail & Movement History Modal */}
+      {selectedAccount && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-sm max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-zinc-800 flex items-start justify-between bg-zinc-950/60">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-zinc-900 border border-zinc-800">
+                  {getAccountIcon(selectedAccount.name)}
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">{selectedAccount.name}</h3>
+                  <div className="text-xl font-extrabold font-mono text-emerald-400">
+                    ${selectedAccount.current_balance.toFixed(2)}{' '}
+                    <span className="text-xs font-normal text-zinc-400">USDT</span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedAccount(null)}
+                className="p-1.5 text-zinc-400 hover:text-white bg-zinc-800/80 rounded-xl"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Purpose */}
+            <div className="px-4 py-2 bg-zinc-950/40 border-b border-zinc-800/60 text-[11px] text-zinc-400">
+              {selectedAccount.purpose}
+            </div>
+
+            {/* Body: Form or History */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Toggle Add Movement Button */}
+              {!isAddingMovement ? (
+                <button
+                  type="button"
+                  onClick={() => setIsAddingMovement(true)}
+                  className="w-full py-2.5 px-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/80 text-xs font-semibold text-zinc-200 flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Registrar Movimiento / Ajuste con motivo</span>
+                </button>
+              ) : (
+                /* Add Movement Form */
+                <form
+                  onSubmit={handleSaveMovement}
+                  className="bg-zinc-950 border border-zinc-800 rounded-2xl p-3.5 space-y-3 animate-in fade-in"
+                >
+                  <div className="flex items-center justify-between pb-1 border-b border-zinc-800/80">
+                    <span className="text-xs font-bold text-zinc-200">Nuevo Movimiento</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingMovement(false)}
+                      className="text-zinc-500 hover:text-zinc-300 text-xs"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+
+                  {/* Type Selector: Ingreso vs Egreso */}
+                  <div className="grid grid-cols-2 gap-1.5 bg-zinc-900 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setMovementType('income')}
+                      className={`py-1.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition-all ${
+                        movementType === 'income'
+                          ? 'bg-emerald-500 text-black shadow'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Ingreso (+)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMovementType('expense')}
+                      className={`py-1.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition-all ${
+                        movementType === 'expense'
+                          ? 'bg-rose-500 text-white shadow'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      <Minus className="w-3 h-3" />
+                      <span>Gasto / Retiro (-)</span>
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] text-zinc-400 block mb-1">Monto (USDT)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      placeholder="0.00"
+                      value={movementAmount}
+                      onChange={(e) => setMovementAmount(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] text-zinc-400 block mb-1">Concepto o Motivo</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ej. Rendimiento Earn, Gasolina extra, Ajuste..."
+                      value={movementDescription}
+                      onChange={(e) => setMovementDescription(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs rounded-xl shadow-md active:scale-95 transition-all"
+                  >
+                    Guardar en Historial
+                  </button>
+                </form>
+              )}
+
+              {/* Transactions List */}
+              <div>
+                <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-400 mb-2">
+                  <History className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Historial Reciente de la Cuenta</span>
+                </div>
+
+                {accountTransactions.length === 0 ? (
+                  <div className="text-center py-6 text-zinc-500 text-xs bg-zinc-950/40 rounded-xl border border-zinc-800/40">
+                    No hay movimientos registrados recientemente.
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {accountTransactions.map((tx) => {
+                      const isIncoming =
+                        tx.type === 'income' || tx.to_account_id === selectedAccount.id;
+                      return (
+                        <div
+                          key={tx.id}
+                          className="bg-zinc-950/60 border border-zinc-800/70 rounded-xl p-2.5 flex items-center justify-between text-xs"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`p-1.5 rounded-lg ${
+                                isIncoming
+                                  ? 'bg-emerald-500/10 text-emerald-400'
+                                  : 'bg-rose-500/10 text-rose-400'
+                              }`}
+                            >
+                              {isIncoming ? (
+                                <TrendingUp className="w-3 h-3" />
+                              ) : (
+                                <TrendingDown className="w-3 h-3" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-medium text-zinc-200">{tx.description}</p>
+                              <p className="text-[10px] text-zinc-500">{formatDate(tx.created_at)}</p>
+                            </div>
+                          </div>
+
+                          <div
+                            className={`font-mono font-bold text-xs ${
+                              isIncoming ? 'text-emerald-400' : 'text-zinc-200'
+                            }`}
+                          >
+                            {isIncoming ? '+' : '-'}${tx.amount.toFixed(2)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Transfer Modal */}
       {isTransferModalOpen && (
