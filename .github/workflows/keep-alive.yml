@@ -1,0 +1,18 @@
+name: Keep Supabase & Backend Alive
+
+on:
+  schedule:
+    # Runs every 3 days at 12:00 UTC to ensure Supabase never hits its 7-day inactivity pause
+    - cron: '0 12 */3 * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Keep-Alive API Endpoint
+        env:
+          APP_URL: ${{ secrets.APP_URL || 'https://my-accounting.vercel.app' }}
+        run: |
+          echo "Sending keep-alive ping to $APP_URL/api/keep-alive..."
+          curl -s -f -X GET "$APP_URL/api/keep-alive" || echo "Note: Check if APP_URL secret is set or if the site is reachable"
