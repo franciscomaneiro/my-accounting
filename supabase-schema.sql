@@ -3,13 +3,10 @@
 -- Supabase / PostgreSQL Database Schema & Initial Seed Data
 -- ==============================================================================
 
--- Habilitar extensión pgcrypto o uuid-ossp
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 -- 1. Cuentas y Balances
 CREATE TABLE IF NOT EXISTS accounts (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(50) NOT NULL, -- 'Principal', 'Subcuenta Hogar', 'Simple Earn'
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(50) NOT NULL,
     current_balance NUMERIC(10,2) NOT NULL DEFAULT 0.00,
     currency VARCHAR(10) DEFAULT 'USDT',
     purpose TEXT,
@@ -18,20 +15,20 @@ CREATE TABLE IF NOT EXISTS accounts (
 
 -- 2. Ciclos de Nómina (Quincenas exactas de 14 días)
 CREATE TABLE IF NOT EXISTS payroll_cycles (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    cycle_date DATE NOT NULL, -- ej. 2026-10-30, 2026-11-13
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    cycle_date DATE NOT NULL,
     hours_worked NUMERIC(6,2) NOT NULL DEFAULT 80.00,
     hourly_rate NUMERIC(6,2) NOT NULL DEFAULT 8.10,
     gross_income NUMERIC(10,2) GENERATED ALWAYS AS (hours_worked * hourly_rate) STORED,
-    status VARCHAR(20) DEFAULT 'planned' -- 'planned', 'active', 'closed'
+    status VARCHAR(20) DEFAULT 'planned'
 );
 
 -- 3. Categorías y Asignaciones Fijas
 CREATE TABLE IF NOT EXISTS expense_categories (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(50) NOT NULL,
     default_amount NUMERIC(10,2) NOT NULL DEFAULT 0.00,
-    periodicity VARCHAR(20) NOT NULL, -- 'biweekly', 'monthly'
+    periodicity VARCHAR(20) NOT NULL,
     target_account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
     is_active BOOLEAN DEFAULT TRUE,
     starts_at DATE,
@@ -40,15 +37,15 @@ CREATE TABLE IF NOT EXISTS expense_categories (
 
 -- 4. Compromisos y Cuotas (Deudas / Préstamos)
 CREATE TABLE IF NOT EXISTS debt_plans (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    title VARCHAR(100) NOT NULL, -- 'Cashea Los 777', 'Cricut Cuotas', 'Teléfono Fiado'
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title VARCHAR(100) NOT NULL,
     total_amount NUMERIC(10,2) NOT NULL,
     installment_amount NUMERIC(10,2) NOT NULL,
     total_installments INT NOT NULL,
     installments_paid INT NOT NULL DEFAULT 0,
     start_date DATE NOT NULL,
-    frequency VARCHAR(20) DEFAULT 'biweekly', -- 'biweekly', 'monthly_fixed_day'
-    fixed_day INT, -- ej. 14 para Cricut
+    frequency VARCHAR(20) DEFAULT 'biweekly',
+    fixed_day INT,
     is_completed BOOLEAN DEFAULT FALSE,
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -56,14 +53,14 @@ CREATE TABLE IF NOT EXISTS debt_plans (
 
 -- 5. Transacciones y Movimientos
 CREATE TABLE IF NOT EXISTS transactions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cycle_id UUID REFERENCES payroll_cycles(id) ON DELETE SET NULL,
     account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
     to_account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
     category VARCHAR(50),
     description TEXT,
     amount NUMERIC(10,2) NOT NULL,
-    type VARCHAR(10) NOT NULL, -- 'income', 'expense', 'transfer'
+    type VARCHAR(10) NOT NULL,
     is_settled BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -72,11 +69,37 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE INDEX IF NOT EXISTS idx_payroll_cycles_date ON payroll_cycles(cycle_date);
 CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at);
 
+-- Habilitar Row Level Security (RLS) pero permitir acceso con anon key para uso unipersonal
+ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payroll_cycles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE expense_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE debt_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+
+-- Políticas de acceso para uso unipersonal
+DO $$ 
+BEGIN
+  DROP POLICY IF EXISTS "Permitir todo a usuarios anon en accounts" ON accounts;
+  CREATE POLICY "Permitir todo a usuarios anon en accounts" ON accounts FOR ALL USING (true) WITH CHECK (true);
+
+  DROP POLICY IF EXISTS "Permitir todo a usuarios anon en payroll_cycles" ON payroll_cycles;
+  CREATE POLICY "Permitir todo a usuarios anon en payroll_cycles" ON payroll_cycles FOR ALL USING (true) WITH CHECK (true);
+
+  DROP POLICY IF EXISTS "Permitir todo a usuarios anon en expense_categories" ON expense_categories;
+  CREATE POLICY "Permitir todo a usuarios anon en expense_categories" ON expense_categories FOR ALL USING (true) WITH CHECK (true);
+
+  DROP POLICY IF EXISTS "Permitir todo a usuarios anon en debt_plans" ON debt_plans;
+  CREATE POLICY "Permitir todo a usuarios anon en debt_plans" ON debt_plans FOR ALL USING (true) WITH CHECK (true);
+
+  DROP POLICY IF EXISTS "Permitir todo a usuarios anon en transactions" ON transactions;
+  CREATE POLICY "Permitir todo a usuarios anon en transactions" ON transactions FOR ALL USING (true) WITH CHECK (true);
+END $$;
+
 -- ==============================================================================
--- DATOS SEMILLA INICIALES (Contexto Financiero Inicial del Usuario)
+-- DATOS SEMILLA INICIALES
 -- ==============================================================================
 
--- Insertar Cuentas
+-- 1. Insertar Cuentas
 INSERT INTO accounts (id, name, current_balance, currency, purpose)
 VALUES 
   ('a0000000-0000-0000-0000-000000000001', 'Binance Principal', 75.28, 'USDT', 'Fondos líquidos de uso inmediato, ocio y gastos del día a día ($50 semanales + $25.28 libre)'),
@@ -84,7 +107,7 @@ VALUES
   ('a0000000-0000-0000-0000-000000000003', 'Simple Earn', 308.93, 'USDT', 'Reserva de liquidez / ahorro con devengo y pote acumulativo de contingencia (Viaje playa 18 Dic)')
 ON CONFLICT (id) DO NOTHING;
 
--- Insertar Ciclos de Nómina
+-- 2. Insertar Ciclos de Nómina
 INSERT INTO payroll_cycles (id, cycle_date, hours_worked, hourly_rate, status)
 VALUES
   ('c0000000-0000-0000-0000-000000000001', '2026-10-30', 56.00, 8.10, 'active'),
@@ -94,7 +117,7 @@ VALUES
   ('c0000000-0000-0000-0000-000000000005', '2026-12-25', 80.00, 8.10, 'planned')
 ON CONFLICT (id) DO NOTHING;
 
--- Insertar Gastos Fijos Quincenales
+-- 3. Insertar Gastos Fijos Quincenales
 INSERT INTO expense_categories (id, name, default_amount, periodicity, target_account_id, is_active)
 VALUES
   ('e0000000-0000-0000-0000-000000000001', 'Alquiler (50% Quincenal)', 82.50, 'biweekly', 'a0000000-0000-0000-0000-000000000002', TRUE),
@@ -105,7 +128,7 @@ VALUES
   ('e0000000-0000-0000-0000-000000000006', 'Depilación pareja', 15.00, 'biweekly', 'a0000000-0000-0000-0000-000000000001', TRUE)
 ON CONFLICT (id) DO NOTHING;
 
--- Insertar Deudas y Cuotas Vivas
+-- 4. Insertar Deudas y Cuotas Vivas
 INSERT INTO debt_plans (id, title, total_amount, installment_amount, total_installments, installments_paid, start_date, frequency, is_completed, notes)
 VALUES
   ('d0000000-0000-0000-0000-000000000001', 'Cashea (Los 777)', 115.29, 38.43, 3, 0, '2026-10-30', 'biweekly', FALSE, 'Cuotas de $38,43 los días 30 oct, 13 nov y 27 nov (finiquita el 27)'),
