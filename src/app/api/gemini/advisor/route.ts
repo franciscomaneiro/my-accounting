@@ -134,32 +134,65 @@ function generateOfflineSimulatedAdvice(message: string, ctx: any): string {
   const currentPocket = ctx?.freePocket ?? 117.67;
   const weeklyCurrent = ctx?.weeklyPocket ?? 58.83;
 
-  // 1. Detect Intent: Register Expense
-  if (query.includes('gasté') || query.includes('gasto') || query.includes('pagué') || query.includes('registra gasto')) {
+  // 1. Detect Intent: Register Expense / Withdrawal
+  if (
+    query.includes('gasté') ||
+    query.includes('gaste') ||
+    query.includes('usé') ||
+    query.includes('use') ||
+    query.includes('pagué') ||
+    query.includes('pague') ||
+    query.includes('saqué') ||
+    query.includes('saque') ||
+    query.includes('retiré') ||
+    query.includes('retire') ||
+    query.includes('registra gasto') ||
+    query.includes('egreso')
+  ) {
     const matchAmount = query.match(/\$?(\d+(?:\.\d+)?)/);
-    const amount = matchAmount ? parseFloat(matchAmount[1]) : 15.00;
-    const desc = query.includes('gasolina')
-      ? 'Gasolina Corsa'
-      : query.includes('mercado')
-      ? 'Mercado imprevisto'
-      : 'Gasto del día a día';
+    const isEarn = query.includes('earn') || query.includes('simple earn');
+    const isHogar = query.includes('hogar');
+    
+    const targetAccountId = isEarn ? 'acc-earn' : isHogar ? 'acc-hogar' : 'acc-principal';
+    const targetAccountName = isEarn ? 'Binance Simple Earn' : isHogar ? 'Subcuenta Hogar' : 'Binance Principal';
+    const currentBalance = isEarn
+      ? (ctx?.earnBalance || 308.93)
+      : isHogar
+      ? (ctx?.hogarBalance || 167.50)
+      : (ctx?.principalBalance || 75.28);
 
-    return `He preparado el registro de tu gasto de **$${amount.toFixed(2)} USDT**.
+    const defaultAmount = isEarn && (query.includes('telefono') || query.includes('teléfono')) ? 300.00 : 15.00;
+    const amount = matchAmount ? parseFloat(matchAmount[1]) : defaultAmount;
 
-- **Cuenta afectada:** Binance Principal (Bolsillo)
+    let desc = 'Gasto del día a día';
+    if (isEarn && (query.includes('telefono') || query.includes('teléfono') || query.includes('inicial'))) {
+      desc = 'Inicial Teléfono Nuevo (Puente Simple Earn)';
+    } else if (query.includes('gasolina')) {
+      desc = 'Gasolina Corsa';
+    } else if (query.includes('mercado')) {
+      desc = 'Mercado imprevisto';
+    } else if (query.includes('telefono') || query.includes('teléfono')) {
+      desc = 'Pago/Inicial Teléfono';
+    }
+
+    const newBalance = Math.max(0, currentBalance - amount);
+
+    return `He preparado el registro de tu movimiento por **$${amount.toFixed(2)} USDT**.
+
+- **Cuenta afectada:** ${targetAccountName}
 - **Concepto:** ${desc}
-- **Impacto:** Tu saldo líquido pasará de $${(ctx?.principalBalance || 75.28).toFixed(2)} a $${Math.max(0, (ctx?.principalBalance || 75.28) - amount).toFixed(2)} USDT.
+- **Saldo actual:** $${currentBalance.toFixed(2)} USDT ➔ **Nuevo saldo estimado:** $${newBalance.toFixed(2)} USDT
 
-Confirma la acción a continuación para guardarla de inmediato en tu historial:
+Al confirmar abajo con un solo toque, se actualizará el saldo de la cuenta y quedará registrado en tu historial de movimientos:
 
 \`\`\`action
 {
   "entity": "gasto",
   "title": "${desc}",
-  "summary": "Registrar egreso de $${amount.toFixed(2)} USDT en Binance Principal",
+  "summary": "Registrar salida de $${amount.toFixed(2)} USDT en ${targetAccountName}",
   "data": {
     "amount": ${amount},
-    "account_id": "acc-principal",
+    "account_id": "${targetAccountId}",
     "description": "${desc}",
     "type": "expense"
   }
